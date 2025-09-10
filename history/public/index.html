@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>警報中心</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        #alerts-container {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        }
+        .alert-card {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        .alert-card:hover {
+            transform: translateY(-5px);
+        }
+        .alert-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            display: block;
+        }
+        .alert-info {
+            padding: 15px;
+        }
+        .alert-info h3 {
+            margin-top: 0;
+            font-size: 1.2em;
+            color: #555;
+        }
+        .alert-info p {
+            margin: 5px 0;
+            color: #777;
+            font-size: 0.9em;
+        }
+        .no-image {
+            background-color: #eee;
+            color: #888;
+            text-align: center;
+            line-height: 200px;
+            font-style: italic;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            float: right;
+            font-size: 0.8em;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>警報中心</h1>
+        <div id="alerts-container">
+            </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAlerts();
+        });
+
+        async function fetchAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    displayAlerts(data.alerts);
+                } else {
+                    console.error('獲取警報列表失敗:', data.message);
+                }
+            } catch (error) {
+                console.error('API 請求錯誤:', error);
+            }
+        }
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            const ampm = hours >= 12 ? '下午' : '上午';
+            const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
+
+            return `${year}/${month}/${day} ${ampm} ${formattedHours}:${minutes.toString().padStart(2, '0')}`;
+        }
+
+        function getAlarmType(typeId) {
+            const types = {
+                0: '無',
+                1: '離床',
+                2: '跌倒',
+                3: '跌倒一段時間'
+            };
+            return types[typeId] !== undefined ? types[typeId] : '未知';
+        }
+        
+        function getPeopleStatus(statusId) {
+            const statuses = {
+                0: '無人',
+                1: '有人',
+                2: '坐床',
+                3: '睡床',
+                4: '跌倒'
+            };
+            return statuses[statusId] !== undefined ? statuses[statusId] : '未知';
+        }
+
+        function displayAlerts(alerts) {
+            const container = document.getElementById('alerts-container');
+            container.innerHTML = '';
+
+            if (alerts.length === 0) {
+                container.innerHTML = '<p style="text-align: center;">目前沒有任何警報。</p>';
+                return;
+            }
+
+            const reversedAlerts = alerts.reverse();
+
+            reversedAlerts.forEach(alert => {
+                const alertCard = document.createElement('div');
+                alertCard.className = 'alert-card';
+                alertCard.dataset.id = alert.id;
+
+                const imageSrc = alert.imagePath ? `/api/images/${alert.imagePath}` : '';
+                const displayTime = alert.CurrentTime ? formatTimestamp(alert.CurrentTime) : new Date(alert.timestamp).toLocaleString();
+                const alarmTypeText = getAlarmType(alert.AlarmTypes);
+                const peopleStatusText = getPeopleStatus(alert.PeopleStatus);
+
+                alertCard.innerHTML = `
+                    ${imageSrc ? `<img src="${imageSrc}" alt="警報圖片">` : `<div class="no-image">無圖片</div>`}
+                    <div class="alert-info">
+                        <h3>警報 ID: ${alert.id}</h3>
+                        <p><strong>EID:</strong> ${alert.EID ? alert.EID : 'N/A'}</p>
+                        <p><strong>時間:</strong> ${displayTime}</p>
+                        <p><strong>健康狀況:</strong> ${alert.EHealth !== undefined ? alert.EHealth : 'N/A'}</p>
+                        <p><strong>人員狀態:</strong> ${peopleStatusText}</p>
+                        <p><strong>警報類型:</strong> ${alarmTypeText}</p>
+                        <p><strong>活力:</strong> ${alert.Liveness !== undefined ? alert.Liveness : 'N/A'}</p>
+                        <p><strong>床上移動:</strong> ${alert.BedMove !== undefined ? alert.BedMove : 'N/A'}</p>
+                        <button class="delete-btn" onclick="deleteAlert(${alert.id})">刪除</button>
+                    </div>
+                `;
+                container.appendChild(alertCard);
+            });
+        }
+
+        async function deleteAlert(id) {
+            if (!confirm('你確定要刪除這個警報嗎？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/alerts/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    alert('警報已成功刪除');
+                    fetchAlerts();
+                } else {
+                    alert('刪除警報失敗: ' + data.message);
+                }
+            } catch (error) {
+                console.error('刪除請求錯誤:', error);
+                alert('刪除請求錯誤');
+            }
+        }
+    </script>
+</body>
+</html>
